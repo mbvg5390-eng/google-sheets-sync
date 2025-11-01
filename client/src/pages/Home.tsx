@@ -3,22 +3,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, RefreshCw, Table } from "lucide-react";
+import { Loader2, RefreshCw, AlertCircle, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
-interface SheetRow {
-  [key: string]: string;
+interface Excuse {
+  id: number;
+  text: string;
 }
 
 export default function Home() {
-  const [sheetId, setSheetId] = useState("");
-  const [sheetName, setSheetName] = useState("Sheet1");
-  const [data, setData] = useState<SheetRow[]>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [sheetId, setSheetId] = useState("1mw5z6UWdk3GZHiprpr6-oFSVTAje3bE8KADSf3SMnaM");
+  const [sheetName, setSheetName] = useState("الورقة1");
+  const [excuses, setExcuses] = useState<Excuse[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  const fetchSheetData = async () => {
+  const fetchExcuses = async () => {
     if (!sheetId.trim()) {
       toast.error("الرجاء إدخال معرف جوجل شيت");
       return;
@@ -26,8 +27,7 @@ export default function Home() {
 
     setLoading(true);
     try {
-      // استخدام Google Sheets API العامة (للملفات المنشورة)
-      const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+      const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
       
       const response = await fetch(url);
       const text = await response.text();
@@ -37,18 +37,13 @@ export default function Home() {
       const json = JSON.parse(jsonText);
       
       const table = json.table;
-      const cols = table.cols.map((col: any) => col.label || `Column ${col.id}`);
-      const rows = table.rows.map((row: any) => {
-        const rowData: SheetRow = {};
-        row.c.forEach((cell: any, index: number) => {
-          rowData[cols[index]] = cell?.v?.toString() || "";
-        });
-        return rowData;
-      });
+      const rows = table.rows.map((row: any, index: number) => ({
+        id: index + 1,
+        text: row.c[0]?.v?.toString() || "",
+      })).filter((excuse: Excuse) => excuse.text.trim() !== "");
 
-      setHeaders(cols);
-      setData(rows);
-      toast.success("تم تحميل البيانات بنجاح!");
+      setExcuses(rows);
+      toast.success("تم تحميل التعذرات بنجاح!");
     } catch (error) {
       console.error("خطأ في تحميل البيانات:", error);
       toast.error("فشل تحميل البيانات. تأكد من أن الملف منشور للعامة");
@@ -57,25 +52,32 @@ export default function Home() {
     }
   };
 
+  const copyToClipboard = (text: string, id: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    toast.success("تم نسخ التعذر!");
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   useEffect(() => {
     if (autoRefresh && sheetId) {
       const interval = setInterval(() => {
-        fetchSheetData();
-      }, 5000); // تحديث كل 5 ثواني
+        fetchExcuses();
+      }, 5000);
 
       return () => clearInterval(interval);
     }
   }, [autoRefresh, sheetId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="container max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 p-6" dir="rtl">
+      <div className="container max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
-            <Table className="w-10 h-10 text-indigo-600" />
-            موقع متزامن مع جوجل شيت
+            <AlertCircle className="w-10 h-10 text-red-600" />
+            قائمة التعذرات الممنوعة
           </h1>
-          <p className="text-gray-600">اعرض بيانات جوجل شيت بشكل مباشر ومتزامن</p>
+          <p className="text-gray-600">التعذرات التي لا يجوز استخدامها من قبل الباحث</p>
         </div>
 
         <Card className="mb-6 shadow-lg">
@@ -89,20 +91,17 @@ export default function Home() {
                 <Label htmlFor="sheetId">معرف جوجل شيت (Sheet ID)</Label>
                 <Input
                   id="sheetId"
-                  placeholder="مثال: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+                  placeholder="معرف الملف"
                   value={sheetId}
                   onChange={(e) => setSheetId(e.target.value)}
                   dir="ltr"
                 />
-                <p className="text-xs text-gray-500">
-                  يمكنك الحصول عليه من رابط الملف بين /d/ و /edit
-                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="sheetName">اسم الورقة (Sheet Name)</Label>
                 <Input
                   id="sheetName"
-                  placeholder="Sheet1"
+                  placeholder="الورقة1"
                   value={sheetName}
                   onChange={(e) => setSheetName(e.target.value)}
                 />
@@ -110,7 +109,7 @@ export default function Home() {
             </div>
 
             <div className="flex gap-3 flex-wrap">
-              <Button onClick={fetchSheetData} disabled={loading}>
+              <Button onClick={fetchExcuses} disabled={loading} className="bg-red-600 hover:bg-red-700">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -119,7 +118,7 @@ export default function Home() {
                 ) : (
                   <>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    تحميل البيانات
+                    تحميل التعذرات
                   </>
                 )}
               </Button>
@@ -134,59 +133,52 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {data.length > 0 && (
+        {excuses.length > 0 && (
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>البيانات المعروضة</CardTitle>
+              <CardTitle>قائمة التعذرات</CardTitle>
               <CardDescription>
-                {data.length} صف · {autoRefresh && "يتم التحديث تلقائياً كل 5 ثواني"}
+                {excuses.length} تعذر · {autoRefresh && "يتم التحديث تلقائياً كل 5 ثواني"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-indigo-50">
-                      {headers.map((header, index) => (
-                        <th
-                          key={index}
-                          className="border border-gray-300 px-4 py-2 text-right font-semibold text-gray-700"
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.map((row, rowIndex) => (
-                      <tr
-                        key={rowIndex}
-                        className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                      >
-                        {headers.map((header, colIndex) => (
-                          <td
-                            key={colIndex}
-                            className="border border-gray-300 px-4 py-2 text-gray-800"
-                          >
-                            {row[header]}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {excuses.map((excuse) => (
+                  <div
+                    key={excuse.id}
+                    className="flex items-start gap-4 p-4 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    <div className="flex-shrink-0 pt-1">
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-800 font-medium">{excuse.text}</p>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(excuse.text, excuse.id)}
+                      className="flex-shrink-0 p-2 hover:bg-red-200 rounded-lg transition-colors"
+                      title="نسخ النص"
+                    >
+                      {copiedId === excuse.id ? (
+                        <Check className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <Copy className="w-5 h-5 text-red-600" />
+                      )}
+                    </button>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {!loading && data.length === 0 && (
+        {!loading && excuses.length === 0 && (
           <Card className="shadow-lg">
             <CardContent className="py-12 text-center">
-              <Table className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg">لا توجد بيانات لعرضها</p>
+              <AlertCircle className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500 text-lg">لا توجد تعذرات لعرضها</p>
               <p className="text-gray-400 text-sm mt-2">
-                أدخل معرف جوجل شيت واضغط على "تحميل البيانات"
+                أدخل معرف جوجل شيت واضغط على "تحميل التعذرات"
               </p>
             </CardContent>
           </Card>
@@ -200,6 +192,7 @@ export default function Home() {
             <p>• يجب نشر ملف جوجل شيت للعامة حتى يعمل الموقع</p>
             <p>• اذهب إلى ملف جوجل شيت → ملف → مشاركة → نشر على الويب</p>
             <p>• معرف الملف موجود في الرابط بين /d/ و /edit</p>
+            <p>• يمكنك نسخ أي تعذر بالضغط على أيقونة النسخ</p>
           </CardContent>
         </Card>
       </div>
